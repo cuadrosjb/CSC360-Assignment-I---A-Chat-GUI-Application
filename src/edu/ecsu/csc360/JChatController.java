@@ -16,7 +16,9 @@ import javax.jms.TextMessage;
 import javax.jms.Topic;
 import javax.jms.TopicConnection;
 import javax.jms.TopicConnectionFactory;
+import javax.jms.TopicPublisher;
 import javax.jms.TopicSession;
+import javax.jms.TopicSubscriber;
 import javax.naming.InitialContext;
 
 
@@ -25,7 +27,7 @@ public class JChatController implements MessageListener, ActionListener  {
 	private static final Logger Jlog = Logger.getLogger("JChat");
 	
 	TopicConnectionFactory tcf;
-//	QueueConnectionFactory qcf;
+
 	
 	ConnectionFactory connectionFactory;
 	
@@ -37,8 +39,9 @@ public class JChatController implements MessageListener, ActionListener  {
 	TopicSession		session;
 	TopicSession		asyncSession;
 	
-	MessageProducer     msgProducer;
-	MessageConsumer     msgConsumer;
+	TopicPublisher		msgPublisher;
+	TopicSubscriber     msgConsumer;
+	
 	Topic               topic;
 
 	boolean connected = false;
@@ -71,8 +74,7 @@ public class JChatController implements MessageListener, ActionListener  {
 
 	public void onMessage(Message msg) {
 		try {
-//			Jlog.info("onMessage called with: " + ((TextMessage)msg).getText());
-			
+		
 			_scg.jcp.newMessage(_scg.scd.getChatUserName(), JChatMessageTypes.NORMAL, ((TextMessage)msg).getText());
 			
 		} catch (JMSException e) {
@@ -116,27 +118,21 @@ public class JChatController implements MessageListener, ActionListener  {
 			InitialContext ctx = new InitialContext();
 			
 			tcf = (TopicConnectionFactory) ctx.lookup("ConnectionFactory");
-//			qcf = (QueueConnectionFactory) ctx.lookup("ConnectionFactory");
-			
-//			connectionFactory 
-			
 			
 			connection = tcf.createTopicConnection();
-			//session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
+
 			
-			session = connection.createTopicSession(false, Session.AUTO_ACKNOWLEDGE);
-			asyncSession = connection.createTopicSession(false, Session.AUTO_ACKNOWLEDGE);
-			
+			session = connection.createTopicSession(false, Session.AUTO_ACKNOWLEDGE); //Publisher
+			asyncSession = connection.createTopicSession(false, Session.AUTO_ACKNOWLEDGE);//subscriber
 			
 			topic = (Topic) ctx.lookup("MyTopic");
 			
-			
-			
-			
-			msgConsumer = session.createConsumer(topic);
-			msgProducer = session.createProducer(topic);
+			msgPublisher = session.createPublisher(topic);
+			msgConsumer = asyncSession.createSubscriber(topic, null, true);
 			
 			msgConsumer.setMessageListener(this);
+			
+			connection.start();
 			
 			createChatSession(topicName);
 			
@@ -190,8 +186,10 @@ public class JChatController implements MessageListener, ActionListener  {
 		Jlog.info("sendJoinMessage");
 		 
 		try {
-			Message msg = session.createTextMessage(_scg.scd.getChatUserName() + " has joined the chat room.");
-			onMessage(msg);
+			Message msg = session.createTextMessage(" has joined the chat room.");
+			
+			msgPublisher.publish(msg);
+			
 		} catch (JMSException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -205,10 +203,10 @@ public class JChatController implements MessageListener, ActionListener  {
 	 */
 	private void sendLeaveMessage()  {
 		Jlog.info("sendLeaveMessage");
-		Message msg;
+		
 		try {
-			msg = session.createTextMessage(_scg.scd.getChatUserName() + " has left the chat room.");
-			onMessage(msg);
+			Message msg = session.createTextMessage(" has left the chat room.");
+			msgPublisher.publish(msg);
 		} catch (JMSException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -257,7 +255,7 @@ public class JChatController implements MessageListener, ActionListener  {
 		
 		try {
 			Message msg = session.createTextMessage(_scg.jcp.getMessage());
-			onMessage(msg);
+			msgPublisher.publish(msg);
 		} catch (JMSException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
