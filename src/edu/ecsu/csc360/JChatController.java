@@ -75,36 +75,16 @@ public class JChatController implements MessageListener, ActionListener  {
 	public void onMessage(Message msg) {
 		try {
 		
-			_scg.jcp.newMessage(_scg.scd.getChatUserName(), JChatMessageTypes.NORMAL, ((TextMessage)msg).getText());
+//			_scg.jcp.newMessage(_scg.scd.getChatUserName(), JChatMessageTypes.NORMAL, ((TextMessage)msg).getText());
+			_scg.jcp.newMessage((String)msg.getObjectProperty("user"), JChatMessageTypes.NORMAL, (String)msg.getObjectProperty("msg"));
 			
 		} catch (JMSException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		/**
-		 * Display chat message on message panel.
-		 *
-		 * @param msg message received
-		 */
 
-		// Display received message on JChatPanel
-//		_scg.jcp.newMessage("user", JChatMessageTypes.NORMAL, "Hello World");
 	}
-	/*
-	 * END INTERFACE MessageListener
-	 */
 
-	
-	/*
-	 * Performs the actual chat connect.
-	 * The createChatSession() method does the real work
-	 * here, creating:
-	 *    Connection
-	 *    Session
-	 *    Topic
-	 *    MessageConsumer
-	 *    MessageProducer
-	 */
 	private void doConnect()  {
 		Jlog.info("doConnect");
 		_scg.connectItem.setEnabled(false);
@@ -136,6 +116,8 @@ public class JChatController implements MessageListener, ActionListener  {
 			
 			createChatSession(topicName);
 			
+			connected = true;
+			
 		}catch(Exception e){
 			e.printStackTrace();
 		}
@@ -150,10 +132,17 @@ public class JChatController implements MessageListener, ActionListener  {
 		Jlog.info("doDisconnect");
 		
 		sendLeaveMessage();
+		
+		connected = false;
 
 		_scg.connectItem.setEnabled(true);
 		_scg.disconnectItem.setEnabled(false);
 		_scg.jcp.setEnabled(false);
+		
+		setConnectedToChatSession(false);
+		
+		destroyChatSession();
+		
 	}
 
 	/*
@@ -186,8 +175,9 @@ public class JChatController implements MessageListener, ActionListener  {
 		Jlog.info("sendJoinMessage");
 		 
 		try {
-			Message msg = session.createTextMessage(" has joined the chat room.");
-			
+			Message msg = session.createTextMessage();
+			msg.setObjectProperty("user", _scg.scd.getChatUserName());
+			msg.setObjectProperty("msg", " has joined the chat room.");
 			msgPublisher.publish(msg);
 			
 		} catch (JMSException e) {
@@ -205,7 +195,9 @@ public class JChatController implements MessageListener, ActionListener  {
 		Jlog.info("sendLeaveMessage");
 		
 		try {
-			Message msg = session.createTextMessage(" has left the chat room.");
+			Message msg = session.createTextMessage();
+			msg.setObjectProperty("user", _scg.scd.getChatUserName());
+			msg.setObjectProperty("msg", " has left the chat room.");
 			msgPublisher.publish(msg);
 		} catch (JMSException e) {
 			// TODO Auto-generated catch block
@@ -213,69 +205,48 @@ public class JChatController implements MessageListener, ActionListener  {
 		}
 	}
 	
-	
-	/*
-	 * Create 'chat session'. This involves creating:
-	 *    Connection
-	 *    Session
-	 *    Topic
-	 *    MessageConsumer
-	 *    MessageProducer
-	 */
+
 	private boolean createChatSession(String topicStr) {
 		Jlog.info("createChatSession with topicStr: " + topicStr);
 		
 		sendJoinMessage();
-		
-		
-		
-		
-		
-		
 
 		return false;  // or true
 	}
-	
 
-	/*
-	 * Send message using text that is currently in the JChatPanel
-	 * object. The text message is obtained via scp.getMessage()
-	 *
-	 * An object of type ChatObjMessage is created containing the typed
-	 * text. A JMS ObjectMessage is used to encapsulate this ChatObjMessage
-	 * object.
-	 */
 	private void sendChatMessage()  {
-		/*
-		 * Sent out messages in the JPanel text area
-		 * _scg.jcp.getMessage()
-		 * 
-		 */
 		Jlog.info("Send Chat Message");
 		
-		try {
-			Message msg = session.createTextMessage(_scg.jcp.getMessage());
-			msgPublisher.publish(msg);
-		} catch (JMSException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+		if(connectedToChatSession()){
+			try {
+				Message msg = session.createTextMessage(_scg.jcp.getMessage());
+				msg.setObjectProperty("user", _scg.scd.getChatUserName());
+				msg.setObjectProperty("msg", ((TextMessage)msg).getText());
+				msgPublisher.publish(msg);
+				_scg.jcp.newMessage(_scg.scd.getChatUserName(), JChatMessageTypes.NORMAL, ((TextMessage)msg).getText());
+			} catch (JMSException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 		}
-		
-		
 		
 	}
 	
-	/*
-	 * Destroy/close 'chat session'.
-	 */
 	private void destroyChatSession()  {
 		Jlog.info("Destroy Chat Session");
+		
+		try{
+			msgPublisher.close();
+			msgConsumer.close();
+			session.close();
+			asyncSession.close();
+			connection.close();
+		}catch(Exception e){
+			e.printStackTrace();
+		}
 
 	}
 
-	/* 
-	 * BEGIN INTERFACE ActionListener
-	 */
 	/**
 	 * Detects the various UI actions and performs the relevant action:
 	 * Connect menu item (on Chat menu): 	Connect to the chat room
